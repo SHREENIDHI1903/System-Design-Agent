@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import logging
+from tenacity import retry, stop_after_attempt, wait_exponential
 from langchain_ollama import ChatOllama
 from ..core.state import ArchitectState
+from ..core.config import settings
 
 # Configure professional logging
 logging.basicConfig(
@@ -16,16 +18,36 @@ class BaseAgent(ABC):
     Provides standardized LLM initialization, logging, and lifecycle management.
     """
     
-    def __init__(self, model_name: str = "llama3"):
+    def __init__(self, model_name: Optional[str] = None):
         """
         Initializes the agent with a specific LLM model.
         
         Args:
-            model_name (str): The name of the Ollama model to use. Defaults to 'llama3'.
+            model_name (str, optional): Override the default model from settings.
         """
-        self.llm = ChatOllama(model=model_name, temperature=0)
-        self.model_name = model_name
+        self.settings = settings
+        model = model_name or self.settings.MODEL_NAME
+        
+        self.llm = ChatOllama(
+            model=model, 
+            temperature=self.settings.TEMPERATURE
+        )
         self.logger = logging.getLogger(self.__class__.__name__)
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        reraise=True
+    )
+    async def call_with_retry(self, state: ArchitectState) -> Dict[str, Any]:
+        """
+        A resilient wrapper around the agent's core logic.
+        """
+        try:
+            return await self.call(state)
+        except Exception as e:
+            self._log(f"Transient error in agent execution: {str(e)}", level="error")
+            raise
 
     def _log(self, message: str, level: str = "info"):
         """

@@ -12,3 +12,4 @@ wheels/
 # Documentation and temporary files
 docs/
 *.log
+*.db

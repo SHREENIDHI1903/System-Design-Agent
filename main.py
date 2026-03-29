@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from shadow_architect.core.orchestrator import ShadowArchitectGraph
 
 # Configuring global industrial logging
@@ -15,34 +16,41 @@ logger = logging.getLogger("Main")
 
 async def run_shadow_architect():
     """
-    Entry point for the Shadow Architect Sprint 3 workflow.
+    Entry point for the Shadow Architect Sprint 4: Industrialization.
+    Now supports persistence and resilient multi-agent execution.
     """
-    logger.info("Initializing Shadow Architect - Sprint 3: The Hands (MCP & Research Integration)")
+    logger.info("Initializing Shadow Architect - Sprint 4: Industrialization")
     
-    # Initialize the orchestrator (real-time mode enabled)
-    orchestrator = ShadowArchitectGraph(model_name="llama3", mcp_mode="real")
-    app = orchestrator.build_graph()
-
-    # Initial state with the new research_notes field
-    initial_state = {
-        "user_goal": "I want to build a highly scalable real-time chat application with group messaging.",
-        "requirements": [],
-        "research_notes": [],
-        "proposed_stack": {},
-        "validation_logs": [],
-        "is_valid": False,
-        "current_agent": "Interviewer",
-        "metadata": {}
-    }
-
-    logger.info("Starting the multi-agent workflow...")
+    # Initialize the orchestrator (real-time mode enabled if configured)
+    orchestrator = ShadowArchitectGraph()
     
-    # Execute the graph
-    async for event in app.astream(initial_state):
-        for node_name, node_state in event.items():
-            logger.info(f"--- Finished Node: {node_name} ---")
-            # The last state in the stream provides the current progress
-            # print(node_state) 
+    # Initialize Persistence (Sprint 4 Feature - Async Mode)
+    async with AsyncSqliteSaver.from_conn_string("checkpoints.db") as checkpointer:
+        app = orchestrator.build_graph(checkpointer=checkpointer)
+
+        # Thread configuration for session isolation
+        config = {"configurable": {"thread_id": "session_1"}}
+
+        # Initial state with the research_notes field
+        initial_state = {
+            "user_goal": "I want to build a highly scalable real-time chat application with group messaging.",
+            "requirements": [],
+            "research_notes": [],
+            "proposed_stack": {},
+            "validation_logs": [],
+            "is_valid": False,
+            "current_agent": "Interviewer",
+            "metadata": {}
+        }
+
+        logger.info("Starting the resilient multi-agent workflow...")
+        
+        # Execute the graph with persistence config
+        async for event in app.astream(initial_state, config=config):
+            for node_name, node_state in event.items():
+                logger.info(f"--- Finished Node: {node_name} ---")
+                if node_name == "Writer":
+                    logger.info("Architectural artifacts generated in metadata.")
 
     logger.info("Workflow execution final status reached.")
 

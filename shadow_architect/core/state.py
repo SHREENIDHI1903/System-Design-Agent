@@ -2,6 +2,7 @@ from typing import List, Dict, Any, TypedDict, Optional
 
 class ArchitectState(TypedDict):
     """The central state for the Shadow Architect workflow."""
+    user_goal: str
     requirements: List[str]
     proposed_stack: Dict[str, Any]
     validation_logs: List[str]
